@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import os
 from PIL import Image as PILImage
 from agno.agent import Agent
@@ -141,7 +141,7 @@ if uploaded_file is not None:
             os.remove(image_path)
 else:
     st.warning("⚠️ Please upload a medical image to begin analysis.")
-=======
+
 import os
 from PIL import Image as PILImage
 from agno.agent import Agent
@@ -284,4 +284,4 @@ if uploaded_file is not None:
             os.remove(image_path)
 else:
     st.warning("⚠️ Please upload a medical image to begin analysis.")
->>>>>>> 0cca874bbc339e539a6d1d1febf8706440d07202
+
