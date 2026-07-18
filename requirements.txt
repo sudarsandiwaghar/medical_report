@@ -1,6 +1,14 @@
+<<<<<<< HEAD
 streamlit
 pillow
 agno
 google-genai
 duckduckgo-search
+=======
+streamlit
+pillow
+agno
+google-genai
+duckduckgo-search
+>>>>>>> 0cca874bbc339e539a6d1d1febf8706440d07202
 python-dotenv
