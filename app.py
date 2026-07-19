@@ -1,7 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
-
+import fitz
 import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image as PILImage
@@ -155,79 +155,165 @@ st.warning(
 st.sidebar.header("Upload Medical Image")
 
 uploaded_file = st.sidebar.file_uploader(
-    "Choose an image",
-    type=["jpg", "jpeg", "png", "webp", "bmp"],
+    "Choose a medical image or PDF",
+    type=[
+        "jpg",
+        "jpeg",
+        "png",
+        "webp",
+        "bmp",
+        "pdf",
+    ],
 )
+def convert_pdf_to_images(pdf_file) -> list[str]:
+    """Convert every PDF page into a temporary PNG image."""
 
+    temporary_paths = []
+
+    pdf_bytes = pdf_file.getvalue()
+    pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    for page_number in range(len(pdf_document)):
+        page = pdf_document.load_page(page_number)
+
+        pixmap = page.get_pixmap(
+            matrix=fitz.Matrix(2, 2),
+            alpha=False,
+        )
+
+        temporary_file = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".png",
+        )
+
+        temporary_file.close()
+        pixmap.save(temporary_file.name)
+        temporary_paths.append(temporary_file.name)
+
+    pdf_document.close()
+
+    return temporary_paths
 if uploaded_file is None:
-    st.info("Upload a medical image from the sidebar to begin.")
+    st.info("Upload a medical image or PDF from the sidebar to begin.")
 
 else:
-    try:
-        preview_image = PILImage.open(uploaded_file)
+    file_extension = Path(uploaded_file.name).suffix.lower()
 
-        st.image(
-            preview_image,
-            caption="Uploaded medical image",
+    if file_extension == ".pdf":
+        st.info(
+            "PDF uploaded successfully. Each page will be converted "
+            "into an image for analysis."
+        )
+
+        analyze_button = st.sidebar.button(
+            "Analyze PDF",
+            type="primary",
             use_container_width=True,
         )
 
-    except Exception as image_error:
-        st.error(f"Unable to open the uploaded image: {image_error}")
-        st.stop()
+        if analyze_button:
+            temporary_paths = []
 
-    analyze_button = st.sidebar.button(
-        "Analyze Image",
-        type="primary",
-        use_container_width=True,
-    )
+            try:
+                with st.spinner("Converting and analyzing the PDF..."):
+                    temporary_paths = convert_pdf_to_images(
+                        uploaded_file
+                    )
 
-    if analyze_button:
-        file_suffix = Path(uploaded_file.name).suffix.lower()
+                    if not temporary_paths:
+                        st.error("The PDF does not contain any pages.")
+                        st.stop()
 
-        if file_suffix not in {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".webp",
-            ".bmp",
-        }:
-            file_suffix = ".png"
+                    for page_number, image_path in enumerate(
+                        temporary_paths,
+                        start=1,
+                    ):
+                        st.subheader(f"PDF Page {page_number}")
 
-        temporary_path = None
+                        st.image(
+                            image_path,
+                            caption=f"Page {page_number}",
+                            use_container_width=True,
+                        )
 
+                        report = analyze_medical_image(image_path)
+
+                        st.markdown(
+                            f"### Analysis for Page {page_number}"
+                        )
+                        st.markdown(report)
+
+            except Exception as error:
+                st.error(f"Unable to analyze the PDF: {error}")
+
+            finally:
+                for temporary_path in temporary_paths:
+                    if os.path.exists(temporary_path):
+                        os.remove(temporary_path)
+
+    else:
         try:
-            uploaded_file.seek(0)
+            preview_image = PILImage.open(uploaded_file)
 
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=file_suffix,
-            ) as temporary_file:
-                temporary_file.write(uploaded_file.getbuffer())
-                temporary_path = temporary_file.name
+            st.image(
+                preview_image,
+                caption="Uploaded medical image",
+                use_container_width=True,
+            )
 
-            with st.spinner("Analyzing the medical image..."):
-                report = analyze_medical_image(temporary_path)
+        except Exception as image_error:
+            st.error(
+                f"Unable to open the uploaded image: {image_error}"
+            )
+            st.stop()
 
-            st.subheader("🩺 AI-Assisted Analysis")
-            st.markdown(report)
+        analyze_button = st.sidebar.button(
+            "Analyze Image",
+            type="primary",
+            use_container_width=True,
+        )
 
-        except Exception as error:
-            error_message = str(error)
+        if analyze_button:
+            file_suffix = file_extension
 
-            if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+            if file_suffix not in {
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+                ".bmp",
+            }:
+                file_suffix = ".png"
+
+            temporary_path = None
+
+            try:
+                uploaded_file.seek(0)
+
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=file_suffix,
+                ) as temporary_file:
+                    temporary_file.write(
+                        uploaded_file.getbuffer()
+                    )
+                    temporary_path = temporary_file.name
+
+                with st.spinner("Analyzing the medical image..."):
+                    report = analyze_medical_image(
+                        temporary_path
+                    )
+
+                st.subheader("🩺 AI-Assisted Analysis")
+                st.markdown(report)
+
+            except Exception as error:
                 st.error(
-                    "Gemini API quota has been exceeded. Check your Google "
-                    "AI Studio rate limits or billing configuration."
+                    f"Unable to analyze the image: {error}"
                 )
-            elif "404" in error_message or "not found" in error_message.lower():
-                st.error(
-                    "The selected Gemini model is unavailable for this API "
-                    "key. Try changing the model to gemini-2.5-flash."
-                )
-            else:
-                st.error(f"Unable to analyze the image: {error_message}")
-
-        finally:
-            if temporary_path and os.path.exists(temporary_path):
-                os.remove(temporary_path)
+            finally:
+                if (
+                    temporary_path
+                    and os.path.exists(temporary_path)
+                ):
+                    os.remove(temporary_path)
