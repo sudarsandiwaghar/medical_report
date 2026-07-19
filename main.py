@@ -160,7 +160,7 @@ if not GOOGLE_API_KEY:
 
 # Initialize the Medical Agent
 medical_agent = Agent(
-    model=Gemini(id="gemini-2.0-flash-exp"),
+    model=Gemini(id="gemini-3-flash-preview"),
     tools=[DuckDuckGoTools()],
     markdown=True
 )
